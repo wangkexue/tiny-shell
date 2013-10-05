@@ -195,16 +195,54 @@ static bool ResolveExternalCmd(commandT* cmd)
 
 	static void Exec(commandT* cmd, bool forceFork)
 	{
-	}
+	  //printf("%s", cmd->name, cmd->);
+	  //printf("%s\n", cmd->cmdline);
+	  //printf("%s\n", cmd->argv[1]);
+	  pid_t proc = fork();
+      	  int status;
+	  if(proc == 0)
+	    {
+	       const char* name = cmd->name;
+               char* const* argv = cmd->argv;
+	       execv(name, argv);
+	    }
+	  else if(proc < 0)
+	    {
+	      printf("fork error");
+	      exit(1);
+	    }
+	  else
+	    {
+	       wait(&status); 
+	    }
+      	}
 
         static bool IsBuiltIn(char* cmd)
         {
+	  if(strcmp(cmd, "bg")==0 || strcmp(cmd, "cd")==0 || strcmp(cmd, "jobs")==0)
+	        return TRUE;
+	  else
         	return FALSE;     
         }
 
    
 	static void RunBuiltInCmd(commandT* cmd)
 	{
+	  if(strcmp(cmd->argv[0], "bg")==0)
+	    {
+	      printf("%s\n", cmd->argv[0]);
+	    }
+	  else if(strcmp(cmd->argv[0], "cd")==0)
+	    {
+	      int errd = chdir(cmd->argv[1]);
+	      if(errd == -1)
+	        {
+		  printf("path not found");
+	        }
+	    }
+	  else if(strcmp(cmd->argv[0], "jobs"))
+	    {
+	    }
 	}
 
         void CheckJobs()

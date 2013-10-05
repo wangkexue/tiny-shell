@@ -76,6 +76,7 @@ int main (int argc, char *argv[])
 		/* read command line */
 	        printf("tsh>");
 		getCommandLine(&cmdLine, BUFSIZE);
+		//printf("%s\t%d\n",argv[0],argc);
 
 	        if(strcmp(cmdLine, "exit") == 0 /*|| strcmp(cmdLine, "test") == 0*/)
         {
@@ -99,6 +100,14 @@ int main (int argc, char *argv[])
 
 static void sig(int signo)
 {
-
+  switch (signo) 
+    {
+    case 1:  // SIGINT
+      break;
+    case 2:  // SICCONT
+      break;
+    case 3:  // SIGSTOP
+      break;
+      }
 }
 
