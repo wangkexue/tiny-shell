@@ -55,7 +55,7 @@
 	#define BUFSIZE 80
 
   /************Global Variables*********************************************/
-
+   
   /************Function Prototypes******************************************/
 	/* handles SIGINT and SIGSTOP signals */	
 	static void sig(int);
@@ -66,9 +66,9 @@
 
 int main (int argc, char *argv[])
 {
-	/* Initialize command buffer */
+        /* Initialize command buffer */
 	char* cmdLine = malloc(sizeof(char*)*BUFSIZE);
-	
+
 	/* shell initialization */
 	if (signal(SIGINT, sig) == SIG_ERR) PrintPError("SIGINT");
 	if (signal(SIGTSTP, sig) == SIG_ERR) PrintPError("SIGTSTP");

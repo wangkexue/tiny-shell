@@ -62,21 +62,25 @@
         #define MAXJOBS 64
         #define RUNNING 1
         #define STOPPED 2
+        #define Done 3
  
         pid_t gfg;
-        int gi = 0;
+//        pid_t gfproc;
+        int gi = 1;
   /************Global Variables*********************************************/
 
 	#define NBUILTINCOMMANDS (sizeof BuiltInCommands / sizeof(char*))
 
 	typedef struct bgjob_l {
 		pid_t pid;
-	        int status;
+	        char* status;
 		struct bgjob_l* next;
+	        struct command_t* cmd;
 	} bgjobL;
 
 	/* the pids of the background processes */
-	bgjobL *bgjobs = NULL;
+	//bgjobL *bgjobs = NULL;
+        bgjobL bgjobs[MAXJOBS];
         
   /************Function Prototypes******************************************/
 	/* run command */
@@ -126,21 +130,10 @@
 	{
 		// TODO
 	  pid_t procbg = getpid();
-	  /*
-	  if(bgjobs)
-	    {
-	      bgjobs[gi].pid = procbg;
-	      bgjobs[gi-1].next = bgjobs+gi;
-	    }
-	  else
-	    {
-	      bgjobs[gi].pid = procbg;
-	    }
-	  */
-	  //gi++;
+	  //	  printf("getpid in RunCmdBg %d\n", procbg);
 	  kill(procbg, SIGCONT);
-	  printf("%d\n", procbg);
-	  // exit(1);
+	  printf("[%d] %d\n", gi, procbg);
+	  exit(1);
 	}
 
 	void RunCmdPipe(commandT* cmd1, commandT* cmd2)
@@ -218,6 +211,7 @@ static bool ResolveExternalCmd(commandT* cmd)
 	static void Exec(commandT* cmd, bool forceFork)
 	{
 	  pid_t proc = fork();
+	  //	  printf("child pid in Exec %d", proc);
       	  int status;
 	  if(proc > 0)
 	    {
@@ -226,16 +220,35 @@ static bool ResolveExternalCmd(commandT* cmd)
 	      //setpgid(getpid(), 1);
 	      waitpid(proc, &status, WUNTRACED);
 	      //wait(&status);
-	      if(WIFSTOPPED(status))
+	       if(WIFSTOPPED(status))
 		{
-		  printf("child %d stopped\n", proc);
+		  cmd->bg = 1;
+		  bgjobs[gi].status = "Stopped";
+		  printf("[%d] Stopped                %s\n", gi, cmd->cmdline);
 		}
+	        if(cmd->bg)
+		{
+		  bgjobs[gi].pid = proc;
+		  bgjobs[gi].cmd = cmd;
+		  if(!bgjobs[gi].status)
+		    {
+		      bgjobs[gi].status = "Running";
+		      strcat((bgjobs[gi].cmd)->cmdline, "&");
+		    }
+		  //printf("[%d]\t%d\t%s\n", gi, bgjobs[gi].pid, (bgjobs[gi].cmd)->cmdline);
+		  if(bgjobs[gi-1].pid)
+		    {
+		      bgjobs[gi-1].next = bgjobs+gi;
+		    }
+		  gi++;
+      		 }
 	     }
 	  else if(proc == 0)
 	    {
 	         if(cmd->bg) // background
 		 {
 		   RunCmdBg(cmd);
+		   //exit(1);
 		 }
 		 else  // foreground
 		 {
@@ -257,25 +270,54 @@ static bool ResolveExternalCmd(commandT* cmd)
 
         static bool IsBuiltIn(char* cmd)
         {
-	  if(strcmp(cmd, "bg")==0 || strcmp(cmd, "cd")==0 || strcmp(cmd, "jobs")==0)
+	  if(strcmp(cmd, "bg")==0 || strcmp(cmd, "cd")==0 || strcmp(cmd, "jobs")==0 || strcmp(cmd, "fg")==0)
 	        return TRUE;
 	  else
         	return FALSE;     
         }
 
+void RunBgJobs(int pnum)
+{
+     kill(bgjobs[pnum].pid, SIGCONT);
+     bgjobs[pnum].status = "Running";
+     strcat((bgjobs[pnum].cmd)->cmdline, " &");
+     printf("[%d] %s\n", pnum, (bgjobs[pnum].cmd)->cmdline);
+}
    
 	static void RunBuiltInCmd(commandT* cmd)
 	{
 	  if(strcmp(cmd->argv[0], "bg")==0)
 	    {
-	      if(kill(atoi(cmd->argv[1]), SIGCONT) < 0)
+	      	if(cmd->argc == 1)
 		{
-		  printf("can't find the job\n");
+		  int i;
+		  int max = 0;
+		  for(i=1;i<gi;i++)
+		    {
+		      if(strcmp(bgjobs[i].status,"Stopped")==0)
+			max = i;
+		    }
+		  if(!max)
+		    printf("bg: current: no such job\n");
+		  else
+		    {
+		      RunBgJobs(max);
+		    }
 		}
-	      else
-		{
-		  printf("%s", cmd->cmdline);
-		}
+		else
+		  {
+		    int pnum = atoi(cmd->argv[1]);
+		    //printf("argc is %d\n", cmd->argc);
+		    if(pnum >= gi)
+		      printf("bg: %d: no such job\n", pnum);
+		    else if(strcmp(bgjobs[pnum].status, "Running")==0)
+		      printf("bg: job %d already in background\n", pnum);
+		    else
+		      {
+			RunBgJobs(pnum);
+		      }
+		  }
+
 	    }
 	  else if(strcmp(cmd->argv[0], "cd")==0)
 	    {
@@ -292,10 +334,35 @@ static bool ResolveExternalCmd(commandT* cmd)
 		      printf("path not found");
 	     	}
 	    }
-	  else if(strcmp(cmd->argv[0], "jobs"))
+	  else if(strcmp(cmd->argv[0], "jobs")==0)
 	    {
+	      //printf("jobs\n");
+	      int i;
+	      for(i = 1;i < gi;i++)
+		{
+		  printf("[%d] %s               %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
+		 }
+	    }
+	  else if(strcmp(cmd->argv[0], "fg")==0)
+	    {
+	      if(cmd->argc == 1)
+		{
+		}
+	      else
+		{
+		  int pnum = atoi(cmd->argv[1]);
+		  if(pnum >= gi)
+		    printf("fg: %d: no such job\n", pnum);
+		  else
+		    {
+		      int status;
+		      gfg = bgjobs[pnum].pid;
+		      waitpid(gfg, &status, WUNTRACED);
+		    }
+		}
 	    }
 	}
+
 
         void CheckJobs()
 	{
@@ -331,12 +398,14 @@ void ReleaseCmdT(commandT **cmd){
 void StopFgProc()
 { 
   //pid_t child = getpid() + 2;
-   kill(gfg, SIGTSTP);
+  kill(gfg, SIGTSTP);
+  printf("\n");
  }
 
 void IntFgProc()
 {
-  kill(-gfg, SIGTSTP);
+  printf("\n");
+  kill(-gfg, SIGINT);
 }
 
 void KillBG()
