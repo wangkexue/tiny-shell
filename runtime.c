@@ -59,19 +59,25 @@
      *  variables should be in all lower case. When initializing
      *  structures and arrays, line everything up in neat columns.
      */
-
+        #define MAXJOBS 64
+        #define RUNNING 1
+        #define STOPPED 2
+ 
+        pid_t gfg;
+        int gi = 0;
   /************Global Variables*********************************************/
 
 	#define NBUILTINCOMMANDS (sizeof BuiltInCommands / sizeof(char*))
 
 	typedef struct bgjob_l {
 		pid_t pid;
+	        int status;
 		struct bgjob_l* next;
 	} bgjobL;
 
 	/* the pids of the background processes */
 	bgjobL *bgjobs = NULL;
-
+        
   /************Function Prototypes******************************************/
 	/* run command */
 	static void RunCmdFork(commandT*, bool);
@@ -98,8 +104,8 @@
       else{
         RunCmdPipe(cmd[0], cmd[1]);
         for(i = 0; i < n; i++)
-          ReleaseCmdT(&cmd[i]);
-      }
+          ReleaseCmdT(&cmd[i]);      
+	   }
 	}
 
 	void RunCmdFork(commandT* cmd, bool fork)
@@ -119,6 +125,22 @@
 	void RunCmdBg(commandT* cmd)
 	{
 		// TODO
+	  pid_t procbg = getpid();
+	  /*
+	  if(bgjobs)
+	    {
+	      bgjobs[gi].pid = procbg;
+	      bgjobs[gi-1].next = bgjobs+gi;
+	    }
+	  else
+	    {
+	      bgjobs[gi].pid = procbg;
+	    }
+	  */
+	  //gi++;
+	  kill(procbg, SIGCONT);
+	  printf("%d\n", procbg);
+	  // exit(1);
 	}
 
 	void RunCmdPipe(commandT* cmd1, commandT* cmd2)
@@ -195,27 +217,43 @@ static bool ResolveExternalCmd(commandT* cmd)
 
 	static void Exec(commandT* cmd, bool forceFork)
 	{
-	  //printf("%s", cmd->name, cmd->);
-	  //printf("%s\n", cmd->cmdline);
-	  //printf("%s\n", cmd->argv[1]);
 	  pid_t proc = fork();
       	  int status;
-	  if(proc == 0)
+	  if(proc > 0)
 	    {
-	       const char* name = cmd->name;
-               char* const* argv = cmd->argv;
-	       execv(name, argv);
+	      gfg = proc;
+	      //printf("parent's GID is %d\n", getpgid(getpid()));
+	      //setpgid(getpid(), 1);
+	      waitpid(proc, &status, WUNTRACED);
+	      //wait(&status);
+	      if(WIFSTOPPED(status))
+		{
+		  printf("child %d stopped\n", proc);
+		}
+	     }
+	  else if(proc == 0)
+	    {
+	         if(cmd->bg) // background
+		 {
+		   RunCmdBg(cmd);
+		 }
+		 else  // foreground
+		 {
+		   setpgid(0, 0);
+		   //printf("child GID is %d\n", getpgid(getpid()));
+		   //signal(SIGTTOU, SIG_IGN);
+		   //tcsetpgrp(STDIN_FILENO, getpid());
+		   const char* name = cmd->name;
+		   char* const* argv = cmd->argv;
+		   execv(name, argv);
+		 }
 	    }
-	  else if(proc < 0)
+	  else
 	    {
 	      printf("fork error");
 	      exit(1);
 	    }
-	  else
-	    {
-	       wait(&status); 
-	    }
-      	}
+	}
 
         static bool IsBuiltIn(char* cmd)
         {
@@ -230,15 +268,29 @@ static bool ResolveExternalCmd(commandT* cmd)
 	{
 	  if(strcmp(cmd->argv[0], "bg")==0)
 	    {
-	      printf("%s\n", cmd->argv[0]);
+	      if(kill(atoi(cmd->argv[1]), SIGCONT) < 0)
+		{
+		  printf("can't find the job\n");
+		}
+	      else
+		{
+		  printf("%s", cmd->cmdline);
+		}
 	    }
 	  else if(strcmp(cmd->argv[0], "cd")==0)
 	    {
-	      int errd = chdir(cmd->argv[1]);
-	      if(errd == -1)
-	        {
-		  printf("path not found");
-	        }
+	      if(cmd->argc == 1)
+		{
+		  int errd = chdir(getenv("HOME"));
+		  if(errd == -1)
+		    printf("path not found");
+		}
+	      else
+		{
+		  int errd = chdir(cmd->argv[1]);
+		  if(errd == -1)
+		      printf("path not found");
+	     	}
 	    }
 	  else if(strcmp(cmd->argv[0], "jobs"))
 	    {
@@ -274,4 +326,19 @@ void ReleaseCmdT(commandT **cmd){
   for(i = 0; i < (*cmd)->argc; i++)
     if((*cmd)->argv[i] != NULL) free((*cmd)->argv[i]);
   free(*cmd);
+}
+
+void StopFgProc()
+{ 
+  //pid_t child = getpid() + 2;
+   kill(gfg, SIGTSTP);
+ }
+
+void IntFgProc()
+{
+  kill(-gfg, SIGTSTP);
+}
+
+void KillBG()
+{
 }

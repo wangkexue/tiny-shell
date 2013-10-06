@@ -34,8 +34,10 @@
 	#include <stdlib.h>
 	#include <signal.h>
         #include <string.h>
-
+        
         #include <stdio.h>
+//        #include <sys/types.h>
+//       #include <unistd.h>
 
   /************Private include**********************************************/
 	#include "tsh.h"
@@ -70,7 +72,7 @@ int main (int argc, char *argv[])
 	/* shell initialization */
 	if (signal(SIGINT, sig) == SIG_ERR) PrintPError("SIGINT");
 	if (signal(SIGTSTP, sig) == SIG_ERR) PrintPError("SIGTSTP");
-
+	
 	while (!forceExit) /* repeat forever */
 	{
 		/* read command line */
@@ -92,7 +94,7 @@ int main (int argc, char *argv[])
 		Interpret(cmdLine);
 
 	}
-
+        KillBG();
 	/* shell termination */
 	free(cmdLine);
 	return 0;
@@ -102,12 +104,14 @@ static void sig(int signo)
 {
   switch (signo) 
     {
-    case 1:  // SIGINT
+    case SIGINT:
+      IntFgProc();
       break;
-    case 2:  // SICCONT
+    case SIGTSTP:
+      StopFgProc();
       break;
-    case 3:  // SIGSTOP
-      break;
-      }
-}
+      default: 
+	break;
+       }
+     }
 
