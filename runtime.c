@@ -133,7 +133,7 @@
 	  //	  printf("getpid in RunCmdBg %d\n", procbg);
 	  kill(procbg, SIGCONT);
 	  printf("[%d] %d\n", gi, procbg);
-	  exit(1);
+	  //exit(1);
 	}
 
 	void RunCmdPipe(commandT* cmd1, commandT* cmd2)
@@ -218,7 +218,7 @@ static bool ResolveExternalCmd(commandT* cmd)
 	      gfg = proc;
 	      //printf("parent's GID is %d\n", getpgid(getpid()));
 	      //setpgid(getpid(), 1);
-	      waitpid(proc, &status, WUNTRACED);
+	      waitpid(proc, &status, WNOHANG | WUNTRACED);
 	      //wait(&status);
 	       if(WIFSTOPPED(status))
 		{
@@ -248,7 +248,6 @@ static bool ResolveExternalCmd(commandT* cmd)
 	         if(cmd->bg) // background
 		 {
 		   RunCmdBg(cmd);
-		   //exit(1);
 		 }
 		 else  // foreground
 		 {
@@ -264,7 +263,7 @@ static bool ResolveExternalCmd(commandT* cmd)
 	  else
 	    {
 	      printf("fork error");
-	      exit(1);
+	      //exit(1);
 	    }
 	}
 
@@ -406,6 +405,18 @@ void IntFgProc()
 {
   printf("\n");
   kill(-gfg, SIGINT);
+}
+
+void SigchldHandler()
+{
+  pid_t child;
+  int status;
+  child = waitpid(-1, &status, WUNTRACED | WNOHANG);
+  if(!WIFEXITED(status) || WIFCONTINUED(status))    // ignore SIGTSTP & SIGINT
+    return;
+  if(child == gfg)
+    return;
+  // TO DO GetJob from pid then change status to "Done"
 }
 
 void KillBG()

@@ -72,6 +72,7 @@ int main (int argc, char *argv[])
 	/* shell initialization */
 	if (signal(SIGINT, sig) == SIG_ERR) PrintPError("SIGINT");
 	if (signal(SIGTSTP, sig) == SIG_ERR) PrintPError("SIGTSTP");
+	if (signal(SIGCHLD, sig) == SIG_ERR) PrintPError("SIGCHLD");
 	
 	while (!forceExit) /* repeat forever */
 	{
@@ -109,6 +110,9 @@ static void sig(int signo)
       break;
     case SIGTSTP:
       StopFgProc();
+      break;
+    case SIGCHLD:
+      SigchldHandler();
       break;
       default: 
 	break;

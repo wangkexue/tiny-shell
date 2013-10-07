@@ -175,6 +175,8 @@
 	 ***********************************************************************/
 	EXTERN void CheckJobs();
 
+        EXTERN void SigchldHandler();
+
         EXTERN void KillBG();
 
 //EXTERN int gi;
