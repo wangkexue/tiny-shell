@@ -105,6 +105,10 @@
         static void Deletejob(pid_t pid, char* status);
         /* find whether certain job is in background*/
         static bool IsBgjob(int i);
+        /* find the latest stopped or running job*/
+        static int FindLatestjob();
+        /* bring Background job bakc to Foreground*/
+        static void Bg2Fg(int pnum);
   /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -400,13 +404,26 @@ void RunBgJobs(int pnum)
 	    }
 	  else if(strcmp(cmd->argv[0], "fg")==0)
 	    {
+	      
 	      sigset_t sigset;
 	      sigemptyset(&sigset);
 	      sigaddset(&sigset, SIGCHLD);
 	      sigprocmask(SIG_BLOCK, &sigset, NULL);
-
+	      
 	      if(cmd->argc == 1)
 		{
+		  int latestjob = FindLatestjob();
+		  //		  printf("latestjob is %d\n", latestjob);
+		  if(!latestjob)
+		    printf("fg: current: no such job\n");
+		  else
+		    {
+		      Bg2Fg(latestjob);
+		      //printf("success\n");
+		      sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+		      while(gfg>0)
+			sleep(1);
+		    }
 		}
 	      else
 		{
@@ -420,21 +437,10 @@ void RunBgJobs(int pnum)
 		    }
 		  else
 		    {
-		      gfg = bgjobs[pnum].pid;
-		      //bgjobL *fbg= Getjob(gfg);
-		      if(strrchr((bgjobs[pnum].cmd)->cmdline, '&'))
-			{
-			  int len = strlen((bgjobs[pnum].cmd)->cmdline);
-			  ((bgjobs[pnum].cmd)->cmdline)[len-2]='\0';
-			}
-		      gfgcmd = bgjobs[pnum].cmd;
-		      bgjobs[pnum].status = "FG";
-		      //printf("resume %d\n", gfg);
+		      Bg2Fg(pnum);
 		      sigprocmask(SIG_UNBLOCK, &sigset, NULL);
 		      while(gfg > 0)
 			sleep(1);
-		      //int status;
-		      //waitpid(gfg, &status, WNOHANG | WUNTRACED);
 		    }
 		}
 	    }
@@ -443,6 +449,20 @@ void RunBgJobs(int pnum)
 	    }
 	}
 
+static void Bg2Fg(int pnum)
+{
+  if(strcmp(bgjobs[pnum].status, "Stopped")==0)
+    kill(bgjobs[pnum].pid, SIGCONT);
+  
+  if(strrchr((bgjobs[pnum].cmd)->cmdline, '&'))
+    {
+      int len = strlen((bgjobs[pnum].cmd)->cmdline);
+      ((bgjobs[pnum].cmd)->cmdline)[len-2]='\0';
+    }
+  gfg = bgjobs[pnum].pid;
+  gfgcmd = bgjobs[pnum].cmd;
+  bgjobs[pnum].status = "FG";
+}
 
         void CheckJobs(int i)
 	{
@@ -463,6 +483,27 @@ commandT* CreateCmdT(int n)
   for(i = 0; i <=n; i++)
     cd -> argv[i] = NULL;
   return cd;
+}
+
+static int FindLatestjob()
+{
+  int fi = gi;
+  while(bgjobs[--fi].pid)
+    {
+      if(strcmp(bgjobs[fi].status, "Stopped")==0)
+	break;
+    }
+  // printf("fi for Stopped job is %d\n", fi);
+  if(!fi)
+    {
+      fi = gi;
+      while(bgjobs[--fi].pid)
+	{
+	  if(strcmp(bgjobs[fi].status, "Running")==0)
+	    break;
+	}
+    }
+  return fi;
 }
 
 /*Release and collect the space of a commandT struct*/
@@ -504,7 +545,9 @@ void SigchldHandler()
   pid_t child;
   int status;
   child = waitpid(-1, &status, WUNTRACED | WNOHANG);
-  if(!WIFEXITED(status) || WIFCONTINUED(status))    // ignore SIGTSTP & SIGINT
+  if(!WIFEXITED(status))    // ignore SIGTSTP & SIGINT
+    return;
+  if(WIFCONTINUED(status))
     return;
   //printf("I'm stopped\n");
   if(child == gfg)
