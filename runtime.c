@@ -421,14 +421,14 @@ void RunBgJobs(int pnum)
 		  else
 		    {
 		      gfg = bgjobs[pnum].pid;
-		      bgjobL *fbg= Getjob(gfg);
-		      if(strrchr((fbg->cmd)->cmdline, '&'))
+		      //bgjobL *fbg= Getjob(gfg);
+		      if(strrchr((bgjobs[pnum].cmd)->cmdline, '&'))
 			{
-			  int len = strlen((fbg->cmd)->cmdline);
-			  ((fbg->cmd)->cmdline)[len-2]='\0';
+			  int len = strlen((bgjobs[pnum].cmd)->cmdline);
+			  ((bgjobs[pnum].cmd)->cmdline)[len-2]='\0';
 			}
-		      cmd = fbg->cmd;
-		      Deletejob(pnum, "FG");
+		      gfgcmd = bgjobs[pnum].cmd;
+		      bgjobs[pnum].status = "FG";
 		      //printf("resume %d\n", gfg);
 		      sigprocmask(SIG_UNBLOCK, &sigset, NULL);
 		      while(gfg > 0)
