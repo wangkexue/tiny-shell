@@ -1,5 +1,5 @@
 /***************************************************************************
- *  Title: Runtime environment 
+ *  Title:  
  * -------------------------------------------------------------------------
  *    Purpose: Runs commands
  *    Author: Stefan Birrer
@@ -60,12 +60,12 @@
      *  structures and arrays, line everything up in neat columns.
      */
         #define MAXJOBS 64
-        #define RUNNING 1
-        #define STOPPED 2
-        #define Done 3
+//      #define RUNNING 1
+//      #define STOPPED 2
+//      #define Done 3
  
-        pid_t gfg;
-//        pid_t gfproc;
+        pid_t gfg; // foreground job
+        commandT* gfgcmd;
         int gi = 1;
   /************Global Variables*********************************************/
 
@@ -73,6 +73,7 @@
 
 	typedef struct bgjob_l {
 		pid_t pid;
+	        int jid;
 	        char* status;
 		struct bgjob_l* next;
 	        struct command_t* cmd;
@@ -95,6 +96,8 @@
 	static void RunBuiltInCmd(commandT*);
 	/* checks whether a command is a builtin command */
 	static bool IsBuiltIn(char*);
+        /* get job from bgjobs by pid */
+        static bgjobL* Getjob(pid_t pid);
   /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -132,8 +135,7 @@
 	  pid_t procbg = getpid();
 	  //	  printf("getpid in RunCmdBg %d\n", procbg);
 	  kill(procbg, SIGCONT);
-	  printf("[%d] %d\n", gi, procbg);
-	  //exit(1);
+	  // exit(NULL);
 	}
 
 	void RunCmdPipe(commandT* cmd1, commandT* cmd2)
@@ -210,24 +212,45 @@ static bool ResolveExternalCmd(commandT* cmd)
 
 	static void Exec(commandT* cmd, bool forceFork)
 	{
-	  pid_t proc = fork();
+	  sigset_t sigset;
+	  sigemptyset(&sigset);
+	  sigaddset(&sigset, SIGCHLD);
+	  sigprocmask(SIG_BLOCK, &sigset, NULL);
+
+	  pid_t proc;
+	  int status;
 	  //	  printf("child pid in Exec %d", proc);
-      	  int status;
-	  if(proc > 0)
+      	  // int status;
+	  if((proc = fork()) > 0)
 	    {
-	      gfg = proc;
+	      //gfg = proc;
 	      //printf("parent's GID is %d\n", getpgid(getpid()));
 	      //setpgid(getpid(), 1);
-	      waitpid(proc, &status, WNOHANG | WUNTRACED);
-	      //wait(&status);
-	       if(WIFSTOPPED(status))
+	      if(!cmd->bg)
 		{
-		  cmd->bg = 1;
-		  bgjobs[gi].status = "Stopped";
-		  printf("[%d] Stopped                %s\n", gi, cmd->cmdline);
+		  gfg = proc;
+		  /*
+		  if(gfg>0)
+		    printf("%d now running\n", gfg);
+		  */
+		  gfgcmd = cmd;
+		  waitpid(gfg, &status, WNOHANG | WUNTRACED);
+		  sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+		  // printf("status:%d\tWIFSTOPPED:%d\tgfg:%d\n", status, WIFSTOPPED(status), gfg);
+		  while(gfg > 0)
+		    {
+		      sleep(1);
+		    }
+		  // printf("%d", status);
+		  /*
+		  if(WIFSTOPPED(status))
+		   {
+		   }
+		  */
 		}
-	        if(cmd->bg)
+	        else
 		{
+		  waitpid(proc, &status, WNOHANG | WUNTRACED);
 		  bgjobs[gi].pid = proc;
 		  bgjobs[gi].cmd = cmd;
 		  if(!bgjobs[gi].status)
@@ -240,8 +263,11 @@ static bool ResolveExternalCmd(commandT* cmd)
 		    {
 		      bgjobs[gi-1].next = bgjobs+gi;
 		    }
+		  printf("[%d] %d\n", gi, proc);
 		  gi++;
+		  sigprocmask(SIG_UNBLOCK, &sigset, NULL);
       		 }
+	      //gi++;
 	     }
 	  else if(proc == 0)
 	    {
@@ -255,10 +281,11 @@ static bool ResolveExternalCmd(commandT* cmd)
 		   //printf("child GID is %d\n", getpgid(getpid()));
 		   //signal(SIGTTOU, SIG_IGN);
 		   //tcsetpgrp(STDIN_FILENO, getpid());
-		   const char* name = cmd->name;
-		   char* const* argv = cmd->argv;
-		   execv(name, argv);
 		 }
+		 const char* name = cmd->name;
+		 char* const* argv = cmd->argv;
+		 sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+		 execv(name, argv);
 	    }
 	  else
 	    {
@@ -269,7 +296,7 @@ static bool ResolveExternalCmd(commandT* cmd)
 
         static bool IsBuiltIn(char* cmd)
         {
-	  if(strcmp(cmd, "bg")==0 || strcmp(cmd, "cd")==0 || strcmp(cmd, "jobs")==0 || strcmp(cmd, "fg")==0)
+	  if(strcmp(cmd, "bg")==0 || strcmp(cmd, "cd")==0 || strcmp(cmd, "jobs")==0 || strcmp(cmd, "fg")==0 || strcmp(cmd,"alias")==0)
 	        return TRUE;
 	  else
         	return FALSE;     
@@ -324,13 +351,13 @@ void RunBgJobs(int pnum)
 		{
 		  int errd = chdir(getenv("HOME"));
 		  if(errd == -1)
-		    printf("path not found");
+		    printf("path not found\n");
 		}
 	      else
 		{
 		  int errd = chdir(cmd->argv[1]);
 		  if(errd == -1)
-		      printf("path not found");
+		      printf("path not found\n");
 	     	}
 	    }
 	  else if(strcmp(cmd->argv[0], "jobs")==0)
@@ -339,11 +366,16 @@ void RunBgJobs(int pnum)
 	      int i;
 	      for(i = 1;i < gi;i++)
 		{
-		  printf("[%d] %s               %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
+		  printf("[%d] %s                %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
 		 }
 	    }
 	  else if(strcmp(cmd->argv[0], "fg")==0)
 	    {
+	      sigset_t sigset;
+	      sigemptyset(&sigset);
+	      sigaddset(&sigset, SIGCHLD);
+	      sigprocmask(SIG_BLOCK, &sigset, NULL);
+
 	      if(cmd->argc == 1)
 		{
 		}
@@ -354,11 +386,20 @@ void RunBgJobs(int pnum)
 		    printf("fg: %d: no such job\n", pnum);
 		  else
 		    {
-		      int status;
 		      gfg = bgjobs[pnum].pid;
-		      waitpid(gfg, &status, WUNTRACED);
+		      bgjobL *fbg= Getjob(gfg);
+		      cmd = fbg->cmd;
+		      printf("resume %d\n", gfg);
+		      sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+		      while(gfg > 0)
+			sleep(1);
+		      //int status;
+		      //waitpid(gfg, &status, WNOHANG | WUNTRACED);
 		    }
 		}
+	    }
+	  else if(strcmp(cmd->argv[0], "alias") == 0)
+	    {
 	    }
 	}
 
@@ -397,14 +438,33 @@ void ReleaseCmdT(commandT **cmd){
 void StopFgProc()
 { 
   //pid_t child = getpid() + 2;
+  if(!gfg)
+    return;
   kill(gfg, SIGTSTP);
   printf("\n");
+
+  bgjobs[gi].pid = gfg;
+  //printf("stopped process id: %d", getpid());
+  bgjobs[gi].cmd = gfgcmd;
+  bgjobs[gi].status = "Stopped";
+  printf("[%d] Stopped                %s\n", gi, gfgcmd->cmdline);
+  
+  if(bgjobs[gi-1].pid)
+    {
+      bgjobs[gi-1].next = bgjobs + gi;
+    }
+  gi++;
+  
+  gfg = 0;
  }
 
 void IntFgProc()
 {
+  if(!gfg)
+    return;
   printf("\n");
   kill(-gfg, SIGINT);
+  gfg = 0;
 }
 
 void SigchldHandler()
@@ -414,9 +474,30 @@ void SigchldHandler()
   child = waitpid(-1, &status, WUNTRACED | WNOHANG);
   if(!WIFEXITED(status) || WIFCONTINUED(status))    // ignore SIGTSTP & SIGINT
     return;
+  //printf("I'm stopped\n");
   if(child == gfg)
-    return;
-  // TO DO GetJob from pid then change status to "Done"
+    {
+      // printf("%d finished\n", gfg);
+      gfg = 0;
+      return;
+    }
+  bgjobL *bgjob = Getjob(child);
+  bgjob->status = "Done";
+}
+
+static bgjobL* Getjob(pid_t pid)
+{
+  int i;
+  for(i=1;i<gi;i++)
+    {
+      if(bgjobs[i].pid == pid)
+	{
+	  bgjobL *job;
+	  job = bgjobs + i;
+	  return job;
+	}
+    }
+  return NULL;
 }
 
 void KillBG()
