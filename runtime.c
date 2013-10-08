@@ -48,6 +48,7 @@
 	#include <unistd.h>
 	#include <fcntl.h>
 	#include <signal.h>
+//#include <stdbool.h>
 
   /************Private include**********************************************/
 	#include "runtime.h"
@@ -101,7 +102,9 @@
         /*Add a job to bgjobs*/
         static void Addjob(pid_t pid, commandT* cmd, char* status);
         /* Delete a Background job when it is finished or back to foreground*/
-        static void Deletejob(pid_t pid);
+        static void Deletejob(pid_t pid, char* status);
+        /* find whether certain job is in background*/
+        static bool IsBgjob(int i);
   /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -313,7 +316,15 @@ void RunBgJobs(int pnum)
 {
      kill(bgjobs[pnum].pid, SIGCONT);
      bgjobs[pnum].status = "Running";
-     strcat((bgjobs[pnum].cmd)->cmdline, " &");
+     int len = strlen((bgjobs[pnum].cmd)->cmdline);
+     int l = len;
+     while(((bgjobs[pnum].cmd->cmdline)[--l])==' ')
+       {
+       }
+     ((bgjobs[pnum].cmd)->cmdline)[l+1] = ' ';
+     ((bgjobs[pnum].cmd)->cmdline)[l+2] = '&';
+     ((bgjobs[pnum].cmd)->cmdline)[l+3] = '\0';
+
      printf("[%d] %s\n", pnum, (bgjobs[pnum].cmd)->cmdline);
 }
    
@@ -341,8 +352,13 @@ void RunBgJobs(int pnum)
 		  {
 		    int pnum = atoi(cmd->argv[1]);
 		    //printf("argc is %d\n", cmd->argc);
-		    if(pnum >= gi)
+		    if(pnum >= gi || strcmp(bgjobs[pnum].status, "Inactive")==0)
 		      printf("bg: %d: no such job\n", pnum);
+		    else if(strcmp(bgjobs[pnum].status, "Done")==0)
+		      {
+			printf("bg: job has terminated\n");
+			CheckJobs(pnum);
+		      }
 		    else if(strcmp(bgjobs[pnum].status, "Running")==0)
 		      printf("bg: job %d already in background\n", pnum);
 		    else
@@ -364,7 +380,7 @@ void RunBgJobs(int pnum)
 		{
 		  int errd = chdir(cmd->argv[1]);
 		  if(errd == -1)
-		      printf("path not found\n");
+		    printf("cd: %s: No such file or directory\n", cmd->argv[1]);
 	     	}
 	    }
 	  else if(strcmp(cmd->argv[0], "jobs")==0)
@@ -372,8 +388,14 @@ void RunBgJobs(int pnum)
 	      //printf("jobs\n");
 	      int i;
 	      for(i = 1;i < gi;i++)
-		{
-		  printf("[%d] %s                %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
+		{ 
+		  if(IsBgjob(i))
+		    {
+		      printf("[%d] %s                %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
+		      continue;
+		    }
+		  if(strcmp(bgjobs[i].status, "Done")==0)
+		    CheckJobs(i);
 		 }
 	    }
 	  else if(strcmp(cmd->argv[0], "fg")==0)
@@ -389,14 +411,25 @@ void RunBgJobs(int pnum)
 	      else
 		{
 		  int pnum = atoi(cmd->argv[1]);
-		  if(pnum >= gi)
+		  if(pnum >= gi || strcmp(bgjobs[pnum].status, "Inactive")==0)
 		    printf("fg: %d: no such job\n", pnum);
+		  else if(strcmp(bgjobs[pnum].status, "Done")==0)
+		    {
+		      printf("fg: job has terminated\n");
+		      CheckJobs(pnum);
+		    }
 		  else
 		    {
 		      gfg = bgjobs[pnum].pid;
 		      bgjobL *fbg= Getjob(gfg);
+		      if(strrchr((fbg->cmd)->cmdline, '&'))
+			{
+			  int len = strlen((fbg->cmd)->cmdline);
+			  ((fbg->cmd)->cmdline)[len-2]='\0';
+			}
 		      cmd = fbg->cmd;
-		      printf("resume %d\n", gfg);
+		      Deletejob(pnum, "FG");
+		      //printf("resume %d\n", gfg);
 		      sigprocmask(SIG_UNBLOCK, &sigset, NULL);
 		      while(gfg > 0)
 			sleep(1);
@@ -411,9 +444,11 @@ void RunBgJobs(int pnum)
 	}
 
 
-        void CheckJobs()
+        void CheckJobs(int i)
 	{
- 	}
+	  printf("[%d] %s                %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
+	  bgjobs[i].status = "Inactive";
+	}
 
 
 commandT* CreateCmdT(int n)
@@ -478,8 +513,9 @@ void SigchldHandler()
       gfg = 0;
       return;
     }
-  bgjobL *bgjob = Getjob(child);
-  bgjob->status = "Done";
+  //bgjobL *bgjob = Getjob(child);
+  //bgjob->status = "Done";
+  Deletejob(child, "Done");
 }
 
 static void Addjob(pid_t pid, commandT* cmd, char* status)
@@ -506,8 +542,10 @@ static void Addjob(pid_t pid, commandT* cmd, char* status)
   gi++;
 }
 
-static void Deletejob(pid_t pid)
+static void Deletejob(pid_t pid, char* status)
 {
+  bgjobL* job = Getjob(pid);
+  job->status = status;
 }
 
 static bgjobL* Getjob(pid_t pid)
@@ -525,6 +563,19 @@ static bgjobL* Getjob(pid_t pid)
   return NULL;
 }
 
+static bool IsBgjob(int i)
+{
+  if(strcmp(bgjobs[i].status, "Running")==0 || strcmp(bgjobs[i].status, "Stopped")==0)
+    return TRUE;
+  return FALSE;
+}
+
 void KillBG()
 {
+  int i;
+  for(i=1;i<gi;i++)
+    {
+      if(IsBgjob(i))
+	kill(bgjobs[i].pid, SIGINT);
+    }
 }

@@ -173,7 +173,7 @@
 	 *    Input: void
 	 *    Output: void 
 	 ***********************************************************************/
-	EXTERN void CheckJobs();
+	EXTERN void CheckJobs(int i);
 
         EXTERN void SigchldHandler();
 

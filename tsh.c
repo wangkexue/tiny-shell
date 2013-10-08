@@ -73,7 +73,7 @@ int main (int argc, char *argv[])
 	if (signal(SIGINT, sig) == SIG_ERR) PrintPError("SIGINT");
 	if (signal(SIGTSTP, sig) == SIG_ERR) PrintPError("SIGTSTP");
 	if (signal(SIGCHLD, sig) == SIG_ERR) PrintPError("SIGCHLD");
-	
+
 	while (!forceExit) /* repeat forever */
 	{
 		/* read command line */
@@ -88,7 +88,7 @@ int main (int argc, char *argv[])
         }
 
 		/* checks the status of background jobs */
-		CheckJobs();
+		//CheckJobs();
 		
 		/* interpret command and line
 		 * includes executing of commands */
