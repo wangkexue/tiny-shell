@@ -88,7 +88,7 @@ int main (int argc, char *argv[])
         }
 
 		/* checks the status of background jobs */
-		//CheckJobs();
+		CheckJobs();
 		
 		/* interpret command and line
 		 * includes executing of commands */

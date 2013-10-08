@@ -113,18 +113,25 @@
 
 /**************Implementation***********************************************/
     int total_task;
-	void RunCmd(commandT** cmd, int n)
-	{
+    void RunCmd(commandT** cmd, int n)
+    {
       int i;
       total_task = n;
       if(n == 1)
-          RunCmdFork(cmd[0], TRUE);
-      else{
-        RunCmdPipe(cmd[0], cmd[1]);
-        for(i = 0; i < n; i++)
-          ReleaseCmdT(&cmd[i]);      
-	   }
+	{
+	  if(cmd[0]->is_redirect_in)
+	    RunCmdRedirIn(cmd[0], cmd[0]->redirect_in);
+	  else if(cmd[0]->is_redirect_out)
+	    RunCmdRedirOut(cmd[0], cmd[0]->redirect_out);
+	  else
+	    RunCmdFork(cmd[0], TRUE);
 	}
+	  else{
+	    RunCmdPipe(cmd[0], cmd[1]);
+	    for(i = 0; i < n; i++)
+	      ReleaseCmdT(&cmd[i]);      
+      }
+    }
 
 	void RunCmdFork(commandT* cmd, bool fork)
 	{
@@ -155,10 +162,12 @@
 
 	void RunCmdRedirOut(commandT* cmd, char* file)
 	{
+	  printf("%s\n", cmd->cmdline);
 	}
 
 	void RunCmdRedirIn(commandT* cmd, char* file)
 	{
+	  printf("%s\n", cmd->cmdline);
 	}
 
 
@@ -263,25 +272,8 @@ static bool ResolveExternalCmd(commandT* cmd)
 		{
 		  waitpid(proc, &status, WNOHANG | WUNTRACED);
 		  Addjob(proc, cmd, "Running");
-		  /*
-		  bgjobs[gi].pid = proc;
-		  bgjobs[gi].cmd = cmd;
-		  if(!bgjobs[gi].status)
-		    {
-		      bgjobs[gi].status = "Running";
-		      strcat((bgjobs[gi].cmd)->cmdline, "&");
-		    }
-		  //printf("[%d]\t%d\t%s\n", gi, bgjobs[gi].pid, (bgjobs[gi].cmd)->cmdline);
-		  if(bgjobs[gi-1].pid)
-		    {
-		      bgjobs[gi-1].next = bgjobs+gi;
-		    }
-		  printf("[%d] %d\n", gi, proc);
-		  gi++;
-		  */
 		  sigprocmask(SIG_UNBLOCK, &sigset, NULL);
       		 }
-	      //gi++;
 	     }
 	  else if(proc == 0)
 	    {
@@ -292,9 +284,6 @@ static bool ResolveExternalCmd(commandT* cmd)
 		 else  // foreground
 		 {
 		   setpgid(0, 0);
-		   //printf("child GID is %d\n", getpgid(getpid()));
-		   //signal(SIGTTOU, SIG_IGN);
-		   //tcsetpgrp(STDIN_FILENO, getpid());
 		 }
 		 const char* name = cmd->name;
 		 char* const* argv = cmd->argv;
@@ -475,6 +464,14 @@ static void Bg2Fg(int pnum)
 		  bgjobs[i].status = "Inactive";
 		}
 	    }
+	  i = gi;
+	  /*
+	  while(strcmp(bgjobs[--i].status, "Inactive")==0)
+	    {
+	    }
+	  if(i==0)
+	    gi = 1;
+	  */
 	}
 
 
