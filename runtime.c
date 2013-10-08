@@ -162,12 +162,32 @@
 
 	void RunCmdRedirOut(commandT* cmd, char* file)
 	{
-	  printf("%s\n", cmd->cmdline);
+	  char* cmdRedir = strrchr(cmd->cmdline,'>');
+	  *cmdRedir = '\0';
+	  // printf("%s\n", cmd->cmdline);
+	  mode_t filemode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+	  int stdout = dup(STDOUT_FILENO);
+	  int fd = open(file, O_WRONLY | O_CREAT, filemode);
+	  if(fd == -1)
+	    perror("open() error");
+	  dup2(fd, 1);
+	  close(fd);
+	  RunExternalCmd(cmd, TRUE);
+	  dup2(stdout, 1);
 	}
 
 	void RunCmdRedirIn(commandT* cmd, char* file)
 	{
-	  printf("%s\n", cmd->cmdline);
+	  char* cmdredir = strrchr(cmd->cmdline, '<');
+	  *cmdredir = '\0';
+	  int stdin = dup(STDIN_FILENO);
+	  int fd = open(file, O_RDONLY);
+	  if(fd == -1)
+	    perror("open() error");
+	  dup2(fd, 0);
+	  close(fd);
+	  RunExternalCmd(cmd, TRUE);
+	  dup2(stdin, 0);
 	}
 
 
