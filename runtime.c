@@ -98,6 +98,10 @@
 	static bool IsBuiltIn(char*);
         /* get job from bgjobs by pid */
         static bgjobL* Getjob(pid_t pid);
+        /*Add a job to bgjobs*/
+        static void Addjob(pid_t pid, commandT* cmd, char* status);
+        /* Delete a Background job when it is finished or back to foreground*/
+        static void Deletejob(pid_t pid);
   /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -251,6 +255,8 @@ static bool ResolveExternalCmd(commandT* cmd)
 	        else
 		{
 		  waitpid(proc, &status, WNOHANG | WUNTRACED);
+		  Addjob(proc, cmd, "Running");
+		  /*
 		  bgjobs[gi].pid = proc;
 		  bgjobs[gi].cmd = cmd;
 		  if(!bgjobs[gi].status)
@@ -265,6 +271,7 @@ static bool ResolveExternalCmd(commandT* cmd)
 		    }
 		  printf("[%d] %d\n", gi, proc);
 		  gi++;
+		  */
 		  sigprocmask(SIG_UNBLOCK, &sigset, NULL);
       		 }
 	      //gi++;
@@ -443,17 +450,7 @@ void StopFgProc()
   kill(gfg, SIGTSTP);
   printf("\n");
 
-  bgjobs[gi].pid = gfg;
-  //printf("stopped process id: %d", getpid());
-  bgjobs[gi].cmd = gfgcmd;
-  bgjobs[gi].status = "Stopped";
-  printf("[%d] Stopped                %s\n", gi, gfgcmd->cmdline);
-  
-  if(bgjobs[gi-1].pid)
-    {
-      bgjobs[gi-1].next = bgjobs + gi;
-    }
-  gi++;
+  Addjob(gfg, gfgcmd, "Stopped");
   
   gfg = 0;
  }
@@ -483,6 +480,34 @@ void SigchldHandler()
     }
   bgjobL *bgjob = Getjob(child);
   bgjob->status = "Done";
+}
+
+static void Addjob(pid_t pid, commandT* cmd, char* status)
+{
+  bgjobs[gi].pid = pid;
+  bgjobs[gi].cmd = cmd;
+  bgjobs[gi].status = status;
+  bgjobs[gi].jid = gi;
+  if(strcmp(status, "Running")==0)
+    strcat((bgjobs[gi].cmd)->cmdline, "&");
+  int fi = gi;  
+  while(bgjobs[--fi].pid)
+    {
+      if(strcmp(bgjobs[fi].status, "Running")||strcmp(bgjobs[fi].status, "Running"))
+	{
+	  bgjobs[fi].next = bgjobs + gi;
+	  break;
+	}
+    }
+  if(strcmp(bgjobs[gi].status, "Stopped")==0)
+    printf("[%d] Stopped                %s\n", gi, gfgcmd->cmdline);
+  else if(strcmp(bgjobs[gi].status, "Running")==0)
+    printf("[%d] %d\n", gi, bgjobs[gi].pid);
+  gi++;
+}
+
+static void Deletejob(pid_t pid)
+{
 }
 
 static bgjobL* Getjob(pid_t pid)
