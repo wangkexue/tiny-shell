@@ -482,7 +482,7 @@ static void Bg2Fg(int pnum)
 	    {
 	      if(strcmp(bgjobs[i].status, "Done")==0)
 		{
-		  printf("[%d]   %s                 %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
+		  printf("[%d]   %s                    %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
 		 }
 	    }
 	  //printf("%d", gi);
@@ -635,9 +635,9 @@ static void Addjob(pid_t pid, commandT* cmd, char* status)
 	}
     }
   if(strcmp(bgjobs[gi].status, "Stopped")==0)
-    printf("[%d] Stopped                %s\n", gi, gfgcmd->cmdline);
-  else if(strcmp(bgjobs[gi].status, "Running")==0)
-    printf("[%d] %d\n", gi, bgjobs[gi].pid);
+    printf("[%d]   Stopped                 %s\n", gi, gfgcmd->cmdline);
+  //else if(strcmp(bgjobs[gi].status, "Running")==0)
+  // printf("[%d] %d\n", gi, bgjobs[gi].pid);
   gi++;
 }
 
