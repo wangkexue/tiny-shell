@@ -68,6 +68,7 @@
         pid_t gfg; // foreground job
         commandT* gfgcmd;
         int gi = 1;
+        int BGtoFG;
   /************Global Variables*********************************************/
 
 	#define NBUILTINCOMMANDS (sizeof BuiltInCommands / sizeof(char*))
@@ -338,7 +339,7 @@ void RunBgJobs(int pnum)
      ((bgjobs[pnum].cmd)->cmdline)[l+2] = '&';
      ((bgjobs[pnum].cmd)->cmdline)[l+3] = '\0';
 
-     printf("[%d] %s\n", pnum, (bgjobs[pnum].cmd)->cmdline);
+     //printf("[%d] %s\n", pnum, (bgjobs[pnum].cmd)->cmdline);
 }
    
 	static void RunBuiltInCmd(commandT* cmd)
@@ -404,7 +405,7 @@ void RunBgJobs(int pnum)
 		{ 
 		  if(IsBgjob(i))
 		    {
-		      printf("[%d] %s                %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
+		      printf("[%d]   %s                 %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
 		      continue;
 		    }
 		  if(strcmp(bgjobs[i].status, "Done")==0)
@@ -471,6 +472,7 @@ static void Bg2Fg(int pnum)
   gfg = bgjobs[pnum].pid;
   gfgcmd = bgjobs[pnum].cmd;
   bgjobs[pnum].status = "FG";
+  BGtoFG = bgjobs[pnum].jid;
 }
 
         void CheckJobs()
@@ -480,19 +482,20 @@ static void Bg2Fg(int pnum)
 	    {
 	      if(strcmp(bgjobs[i].status, "Done")==0)
 		{
-		  printf("[%d] %s                %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
-		  bgjobs[i].status = "Inactive";
-		}
+		  printf("[%d]   %s                 %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
+		 }
 	    }
-	  i = gi;
+	  //printf("%d", gi);
+	  int j = gi;
 	  if(gi == 1)
 	    return;
-	  while(strcmp(bgjobs[--i].status, "Inactive")==0)
+	  while(strcmp(bgjobs[--j].status, "Inactive")==0)
 	    {
+	      if(j==1)
+		gi = 1;
+		break;
 	    }
-	  if(i==0)
-	    gi = 1;
-	  
+	  bgjobs[i].status = "Inactive";
 	}
 
 
@@ -550,8 +553,14 @@ void StopFgProc()
     return;
   kill(gfg, SIGTSTP);
   printf("\n");
-
-  Addjob(gfg, gfgcmd, "Stopped");
+  if(BGtoFG)
+    {
+      printf("[%d]   Stopped                 %s\n", BGtoFG, gfgcmd->cmdline);
+      bgjobs[BGtoFG].status = "Stopped";
+      BGtoFG = 0;
+    }
+  else
+    Addjob(gfg, gfgcmd, "Stopped");
   
   gfg = 0;
  }
@@ -562,6 +571,11 @@ void IntFgProc()
     return;
   printf("\n");
   kill(-gfg, SIGINT);
+  if(BGtoFG)
+    {
+      bgjobs[BGtoFG].status = "Inactive";
+      BGtoFG = 0;
+    }
   gfg = 0;
 }
 
@@ -589,18 +603,22 @@ void SigchldHandler()
 
 static void Addjob(pid_t pid, commandT* cmd, char* status)
 {
+  //printf("%d", gi);
+  /*
   if(gi>1)
     {
-      bgjobL* job = Getjob(pid);
-  //printf("%d\n", job->pid);
-      if(strcmp(job->status, "FG")==0)
+      bgjobL* job = NULL;
+      if(Getjob(pid))
 	{
-	  job->status = status;
-	  printf("[%d] Stopped                %s\n", job->jid, job->cmd->cmdline);
-	  return;
+	if(strcmp(job->status, "FG")==0)
+	  {
+	    job->status = status;
+	    printf("[%d] Stopped                %s\n", job->jid, job->cmd->cmdline);
+	    return;
+	  }
 	}
     }
-  
+  */
   bgjobs[gi].pid = pid;
   bgjobs[gi].cmd = cmd;
   bgjobs[gi].status = status;
@@ -626,13 +644,17 @@ static void Addjob(pid_t pid, commandT* cmd, char* status)
 static void Deletejob(pid_t pid, char* status)
 {
   bgjobL* job;
-  if(Getjob(pid))
+  //printf("Done\n");
+  
+  if((job = Getjob(pid)))
     {
-      if(strcmp(job->status,"FG")!=0)
-	job->status = "Inactive";
-      else
+      //if(strcmp(job->status,"FG")!=0)
+      //job->status = "Inactive";
+      //else
 	job->status = status;
     }
+  //printf("%d\n", Getjob(pid));
+  
 }
 
 static bgjobL* Getjob(pid_t pid)
