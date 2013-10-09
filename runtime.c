@@ -118,6 +118,7 @@
     {
       int i;
       total_task = n;
+      CheckJobs();
       if(n == 1)
 	{
 	  if(cmd[0]->is_redirect_in)
@@ -314,6 +315,7 @@ static bool ResolveExternalCmd(commandT* cmd)
 	  else
 	    {
 	      printf("fork error");
+	      fflush(stdout);
 	      //exit(1);
 	    }
 	}
@@ -356,7 +358,10 @@ void RunBgJobs(int pnum)
 			max = i;
 		    }
 		  if(!max)
-		    printf("bg: current: no such job\n");
+		    {
+		      printf("bg: current: no such job\n");
+		      fflush(stdout);
+		    }
 		  else
 		    {
 		      RunBgJobs(max);
@@ -367,14 +372,21 @@ void RunBgJobs(int pnum)
 		    int pnum = atoi(cmd->argv[1]);
 		    //printf("argc is %d\n", cmd->argc);
 		    if(pnum >= gi || strcmp(bgjobs[pnum].status, "Inactive")==0)
-		      printf("bg: %d: no such job\n", pnum);
+		      {
+			printf("bg: %d: no such job\n", pnum);
+			fflush(stdout);
+		      }
 		    else if(strcmp(bgjobs[pnum].status, "Done")==0)
 		      {
 			printf("bg: job has terminated\n");
-			CheckJobs(pnum);
+			fflush(stdout);
+			//CheckJobs(pnum);
 		      }
 		    else if(strcmp(bgjobs[pnum].status, "Running")==0)
-		      printf("bg: job %d already in background\n", pnum);
+		      {
+			printf("bg: job %d already in background\n", pnum);
+			fflush(stdout);
+		      }
 		    else
 		      {
 			RunBgJobs(pnum);
@@ -388,13 +400,19 @@ void RunBgJobs(int pnum)
 		{
 		  int errd = chdir(getenv("HOME"));
 		  if(errd == -1)
-		    printf("path not found\n");
+		    {
+		      printf("path not found\n");
+		      fflush(stdout);
+		    }
 		}
 	      else
 		{
 		  int errd = chdir(cmd->argv[1]);
 		  if(errd == -1)
-		    printf("cd: %s: No such file or directory\n", cmd->argv[1]);
+		    {
+		      printf("cd: %s: No such file or directory\n", cmd->argv[1]);
+		      fflush(stdout);
+		    }
 	     	}
 	    }
 	  else if(strcmp(cmd->argv[0], "jobs")==0)
@@ -406,10 +424,11 @@ void RunBgJobs(int pnum)
 		  if(IsBgjob(i))
 		    {
 		      printf("[%d]   %s                 %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
+		      fflush(stdout);
 		      continue;
 		    }
-		  if(strcmp(bgjobs[i].status, "Done")==0)
-		    CheckJobs(i);
+		  //if(strcmp(bgjobs[i].status, "Done")==0)
+		    // CheckJobs(i);
 		 }
 	    }
 	  else if(strcmp(cmd->argv[0], "fg")==0)
@@ -425,7 +444,10 @@ void RunBgJobs(int pnum)
 		  int latestjob = FindLatestjob();
 		  //		  printf("latestjob is %d\n", latestjob);
 		  if(!latestjob)
-		    printf("fg: current: no such job\n");
+		    {
+		      printf("fg: current: no such job\n");
+		      fflush(stdout);
+		    }
 		  else
 		    {
 		      Bg2Fg(latestjob);
@@ -439,10 +461,14 @@ void RunBgJobs(int pnum)
 		{
 		  int pnum = atoi(cmd->argv[1]);
 		  if(pnum >= gi || strcmp(bgjobs[pnum].status, "Inactive")==0)
-		    printf("fg: %d: no such job\n", pnum);
+		    {
+		      printf("fg: %d: no such job\n", pnum);
+		      fflush(stdout);
+		    }
 		  else if(strcmp(bgjobs[pnum].status, "Done")==0)
 		    {
 		      printf("fg: job has terminated\n");
+		      fflush(stdout);
 		      //		      CheckJobs(pnum);
 		    }
 		  else
@@ -478,13 +504,20 @@ static void Bg2Fg(int pnum)
         void CheckJobs()
 	{
 	  int i;
+	  int k = 0;
 	  for(i=1;i<gi;i++)
 	    {
 	      if(strcmp(bgjobs[i].status, "Done")==0)
 		{
+		  char * bgDone;
+		  bgDone = strrchr(bgjobs[i].cmd->cmdline, '&');
+		  *bgDone = '\0';
 		  printf("[%d]   %s                    %s\n", i, bgjobs[i].status, (bgjobs[i].cmd)->cmdline);
+		  fflush(stdout);
+		  k = i;
 		 }
 	    }
+
 	  //printf("%d", gi);
 	  int j = gi;
 	  if(gi == 1)
@@ -492,10 +525,13 @@ static void Bg2Fg(int pnum)
 	  while(strcmp(bgjobs[--j].status, "Inactive")==0)
 	    {
 	      if(j==1)
-		gi = 1;
-		break;
+		{
+		  gi = 1;
+		  break;
+		}
 	    }
-	  bgjobs[i].status = "Inactive";
+	  if(k)
+	    bgjobs[k].status = "Inactive";
 	}
 
 
@@ -556,6 +592,7 @@ void StopFgProc()
   if(BGtoFG)
     {
       printf("[%d]   Stopped                 %s\n", BGtoFG, gfgcmd->cmdline);
+      fflush(stdout);
       bgjobs[BGtoFG].status = "Stopped";
       BGtoFG = 0;
     }
@@ -569,7 +606,8 @@ void IntFgProc()
 {
   if(!gfg)
     return;
-  printf("\n");
+  //  printf("\n");
+  //fflush(stdout);
   kill(-gfg, SIGINT);
   if(BGtoFG)
     {
@@ -592,6 +630,11 @@ void SigchldHandler()
   if(child == gfg)
     {
       // printf("%d finished\n", gfg);
+      if(Getjob(child))
+	{
+	  bgjobL* fgchild = Getjob(child);
+	  fgchild->status = "Inactive";
+	}
       gfg = 0;
       return;
     }
@@ -635,7 +678,10 @@ static void Addjob(pid_t pid, commandT* cmd, char* status)
 	}
     }
   if(strcmp(bgjobs[gi].status, "Stopped")==0)
-    printf("[%d]   Stopped                 %s\n", gi, gfgcmd->cmdline);
+    {
+      printf("[%d]   Stopped                 %s\n", gi, gfgcmd->cmdline);
+      fflush(stdout);
+    }
   //else if(strcmp(bgjobs[gi].status, "Running")==0)
   // printf("[%d] %d\n", gi, bgjobs[gi].pid);
   gi++;
