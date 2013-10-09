@@ -68,6 +68,7 @@ int main (int argc, char *argv[])
 {
         /* Initialize command buffer */
 	char* cmdLine = malloc(sizeof(char*)*BUFSIZE);
+	char* new = malloc(sizeof(char*)*BUFSIZE);
 
 	/* shell initialization */
 	if (signal(SIGINT, sig) == SIG_ERR) PrintPError("SIGINT");
@@ -82,22 +83,31 @@ int main (int argc, char *argv[])
 		//printf("%s\t%d\n",argv[0],argc);
 
 	        if(strcmp(cmdLine, "exit") == 0 /*|| strcmp(cmdLine, "test") == 0*/)
-        {
-          forceExit=TRUE;
-          continue;
-        }
+		  {
+		    forceExit=TRUE;
+		    continue;
+		  }
+
+		new = NULL;
+		/* checks if the cmdLine contain an alis*/
+		new = CheckAlias(cmdLine);
+		//printf("%s\n", cmdLine);
 
 		/* checks the status of background jobs */
 		CheckJobs();
 		
 		/* interpret command and line
 		 * includes executing of commands */
-		Interpret(cmdLine);
+		if(new)
+		  Interpret(new);
+		else
+		  Interpret(cmdLine);
 
 	}
         KillBG();
 	/* shell termination */
 	free(cmdLine);
+	//	free(new);
 	return 0;
 } /* end main */
 

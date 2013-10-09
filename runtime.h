@@ -121,6 +121,16 @@
 	EXTERN void RunCmdRedirIn(commandT*, char*);
 
 	/***********************************************************************
+	 *  Title: Runs two command with input redirection
+	 * ---------------------------------------------------------------------
+	 *    Purpose: Runs a command and redirects the input to a file.
+	 *    Input: a command structure structure and a file name
+	 *    Output: void
+	 ***********************************************************************/
+
+        EXTERN void RunCmdRedirInOut(commandT*, char*, char*);
+
+	/***********************************************************************
 	 *  Title: Stop the foreground process
 	 * ---------------------------------------------------------------------
 	 *    Purpose: Stops the current foreground process if there is any.
@@ -129,6 +139,13 @@
 	 ***********************************************************************/
 	EXTERN void StopFgProc();
 
+	/***********************************************************************
+	 *  Title: Interupt foreground process
+	 * ---------------------------------------------------------------------
+	 *    Purpose: Interupt all the foreground process if there is any.
+	 *    Input: void
+	 *    Output: void
+	 ***********************************************************************/
         EXTERN void IntFgProc();
 	/***********************************************************************
 	 *  Title: Create a command structure 
@@ -175,12 +192,35 @@
 	 ***********************************************************************/
 	EXTERN void CheckJobs();
 
+	/***********************************************************************
+	 *  Title: SIGCHLE Handler 
+	 * ---------------------------------------------------------------------
+	 *    Purpose: Hanle signal SIGCHLD for child process control.
+	 *    Input: void
+	 *    Output: void 
+	 ***********************************************************************/
         EXTERN void SigchldHandler();
+
+	/***********************************************************************
+	 *  Title: Kill Background jobs
+	 * ---------------------------------------------------------------------
+	 *    Purpose: Shutdown background jobs when user exit.
+	 *    Input: void
+	 *    Output: void 
+	 ***********************************************************************/
 
         EXTERN void KillBG();
 
-//EXTERN int gi;
+	/***********************************************************************
+	 *  Title: Check alias
+	 * ---------------------------------------------------------------------
+	 *    Purpose: Check if the command line contain an alias.
+	 *    Input: a pointer to the command line string.
+	 *    Output: a string replaced alias
+	 ***********************************************************************/
+        EXTERN char* CheckAlias(char* cmdline);
 	
+
   /************External Declaration*****************************************/
         
 /**************Definition***************************************************/

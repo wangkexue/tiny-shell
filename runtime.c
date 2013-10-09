@@ -66,8 +66,9 @@
 //      #define Done 3
  
         pid_t gfg; // foreground job
-        commandT* gfgcmd;
-        int gi = 1;
+        commandT* gfgcmd; // foreground command
+        int gi = 1; // counter for bg jobs table 
+        int ga = 1; // counter for alias list
         int BGtoFG;
   /************Global Variables*********************************************/
 
@@ -81,9 +82,17 @@
 	        struct command_t* cmd;
 	} bgjobL;
 
+        typedef struct alias_l {
+	        char* name;
+	        char* cmdline;
+	        char* cmd;
+	        int status;
+        }aliasL;
+
 	/* the pids of the background processes */
 	//bgjobL *bgjobs = NULL;
         bgjobL bgjobs[MAXJOBS];
+        aliasL aliases[MAXJOBS];
         
   /************Function Prototypes******************************************/
 	/* run command */
@@ -102,7 +111,7 @@
         static bgjobL* Getjob(pid_t pid);
         /*Add a job to bgjobs*/
         static void Addjob(pid_t pid, commandT* cmd, char* status);
-        /* Delete a Background job when it is finished or back to foreground*/
+        /* delete a Background job when it is finished or back to foreground*/
         static void Deletejob(pid_t pid, char* status);
         /* find whether certain job is in background*/
         static bool IsBgjob(int i);
@@ -110,6 +119,16 @@
         static int FindLatestjob();
         /* bring Background job bakc to Foreground*/
         static void Bg2Fg(int pnum);
+        /* print Alias to the screen*/
+        static void PrintAlias();
+        /* delete an alias*/
+        static void DeleteAlias(char* name);
+        /*add alias to alias list*/
+        static void AddAlias(commandT* cmd);
+        /* sort the alias cmdline by alphabet*/
+        static void RankAlias();
+        /* swap two aliases' position in alias list*/
+        static void SwapAlias();
   /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
@@ -121,7 +140,10 @@
       CheckJobs();
       if(n == 1)
 	{
-	  if(cmd[0]->is_redirect_in)
+	   //CheckAlias(cmd[0]);
+	   if(cmd[0]->is_redirect_in && cmd[0]->is_redirect_out)
+	     RunCmdRedirInOut(cmd[0], cmd[0]->redirect_in, cmd[0]->redirect_out);
+	     else if(cmd[0]->is_redirect_in)
 	    RunCmdRedirIn(cmd[0], cmd[0]->redirect_in);
 	  else if(cmd[0]->is_redirect_out)
 	    RunCmdRedirOut(cmd[0], cmd[0]->redirect_out);
@@ -132,7 +154,7 @@
 	    RunCmdPipe(cmd[0], cmd[1]);
 	    for(i = 0; i < n; i++)
 	      ReleaseCmdT(&cmd[i]);      
-      }
+	  }
     }
 
 	void RunCmdFork(commandT* cmd, bool fork)
@@ -160,6 +182,36 @@
 
 	void RunCmdPipe(commandT* cmd1, commandT* cmd2)
 	{
+	  int pid1, pid2, fd[2];
+	  if(pipe(fd) < 0)
+	    perror("pipe Error\n");
+	  if((pid1 = fork()) == 0)
+	    {
+	      dup2(fd[1],1);
+	      close(fd[0]);
+	      RunExternalCmd(cmd1, TRUE);
+	    }
+	  else if(pid1<0)
+	    perror("cm1 fork error");
+	  else
+	    {
+	      if((pid2 = fork()) == 0)
+		{
+		  dup2(fd[0], 0);
+		  close(fd[1]);
+		  RunCmdFork(cmd2, TRUE);
+		}
+	      else if(pid2 < 0)
+		perror("cmd2 fork error");
+	      else
+		{
+		  close(fd[0]);
+		  close(fd[1]);
+		  int status;
+		  waitpid(pid1, &status, 0);
+		  waitpid(pid2, &status, 0);
+		}
+	    }
 	}
 
 	void RunCmdRedirOut(commandT* cmd, char* file)
@@ -167,9 +219,8 @@
 	  char* cmdRedir = strrchr(cmd->cmdline,'>');
 	  *cmdRedir = '\0';
 	  // printf("%s\n", cmd->cmdline);
-	  mode_t filemode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 	  int stdout = dup(STDOUT_FILENO);
-	  int fd = open(file, O_WRONLY | O_CREAT, filemode);
+	  int fd = open(file, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	  if(fd == -1)
 	    perror("open() error");
 	  dup2(fd, 1);
@@ -189,6 +240,23 @@
 	  dup2(fd, 0);
 	  close(fd);
 	  RunExternalCmd(cmd, TRUE);
+	  dup2(stdin, 0);
+	}
+    
+        void RunCmdRedirInOut(commandT* cmd, char* file1, char* file2)
+	{
+	  int stdout = dup(STDOUT_FILENO);
+	  int out = open(file2, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	  int stdin = dup(STDIN_FILENO);
+	  int in = open(file1, O_RDONLY);
+	  if(!out || !in)
+	    perror("open() error");
+	  dup2(out, 1);
+	  dup2(in, 0);
+	  close(out);
+	  close(in);
+	  RunExternalCmd(cmd, TRUE);
+	  dup2(stdout, 1);
 	  dup2(stdin, 0);
 	}
 
@@ -322,7 +390,7 @@ static bool ResolveExternalCmd(commandT* cmd)
 
         static bool IsBuiltIn(char* cmd)
         {
-	  if(strcmp(cmd, "bg")==0 || strcmp(cmd, "cd")==0 || strcmp(cmd, "jobs")==0 || strcmp(cmd, "fg")==0 || strcmp(cmd,"alias")==0)
+	  if(strcmp(cmd, "bg")==0 || strcmp(cmd, "cd")==0 || strcmp(cmd, "jobs")==0 || strcmp(cmd, "fg")==0 || strcmp(cmd,"alias")==0 || strcmp(cmd, "unalias")==0)
 	        return TRUE;
 	  else
         	return FALSE;     
@@ -482,8 +550,137 @@ void RunBgJobs(int pnum)
 	    }
 	  else if(strcmp(cmd->argv[0], "alias") == 0)
 	    {
+	      if(cmd->argc == 1)
+		{
+		  PrintAlias();
+		}
+	      else
+		{
+		  AddAlias(cmd);
+		}
+	    }
+	  else if(strcmp(cmd->argv[0], "unalias") == 0)
+	    {
+	      if(cmd->argc == 1)
+		return;
+	      DeleteAlias(cmd->argv[1]);
 	    }
 	}
+char* CheckAlias(char* cmdline)
+{
+  if(ga==1)
+    return NULL;
+  int i;
+  char name[32];
+  for(i=1;i<ga;i++)
+    {
+      if(!aliases[i].status)
+	continue;
+      if(strstr(cmdline, aliases[i].name))
+	{
+	  char* after;
+	  if((after = strchr(cmdline, ' ')))
+	    {
+	      //strcpy(name, aliases[i].cmd);
+	      //strcat(name, after);
+	      //strcpy(cmdline, name);
+	      return NULL;
+	    }
+	  else
+	    {
+	      strcpy(name, aliases[i].cmd);
+	      //printf("name: %s\n", name);
+	      //printf("cmd: %s\n", aliases[i].cmd);
+	      strcpy(cmdline, aliases[i].cmd);
+	    }
+	}
+    }
+  //printf("cmdline: %s", cmdline);
+  return cmdline;
+}
+
+static void PrintAlias()
+{
+  int i;
+  if(ga==1)
+    return;
+  RankAlias();
+  for(i=1;i<ga;i++)
+    {
+      if(aliases[i].status)
+	{
+	  printf("%s'\n", aliases[i].cmdline);
+	}
+    }
+}
+
+static void AddAlias(commandT* cmd)
+{
+  //char newcmd[25];
+  //strcpy(newcmd, cmd->cmdline);
+  aliases[ga].cmdline = cmd->cmdline;
+  char* chead = strchr(cmd->cmdline, '\'') + 1;
+  char* ctail = strrchr(cmd->cmdline, '\'');
+  *ctail = '\0';
+  char* nhead = cmd->argv[1];
+  char* ntail = strchr(cmd->argv[1], '=');
+  *ntail = '\0';
+  aliases[ga].name = nhead;
+  aliases[ga].cmd = chead;
+  aliases[ga].status = 1;
+  RankAlias();
+  ga++;
+  //cmd = NULL;
+  //free(cmd);
+}
+
+static void RankAlias()
+{
+  //  int result;
+  int i;
+  int j = 1;
+  for( i=1;i < ga -1;i++)
+    for( j=1; j < ga-1-i;j++)
+      {
+	if(strcmp(aliases[j].name, aliases[j+1].name))
+	  SwapAlias(&(aliases[j]), &(aliases[j+1]));
+      }
+}
+
+static void SwapAlias(aliasL* a1, aliasL* a2)
+{
+  aliasL temp;
+  temp.name = a1->name;
+  temp.cmd = a1->cmd;
+  temp.cmdline = a1->cmdline;
+  temp.status = a1->status;
+  a1->name = a2->name;
+  a1->cmd = a2->cmd;
+  a1->cmdline = a2->cmdline;
+  a1->status = a2->status;
+  a2->name = temp.name;
+  a2->cmd = temp.cmd;
+  a2->cmdline = temp.cmdline;
+  a2->status = temp.status;
+}
+
+//static void Exchange(aliasL* a1, aliasL* a2)
+//{
+//}
+
+static void DeleteAlias(char* name)
+{
+  int i;
+  for(i=1;i<ga;i++)
+    {
+      if(aliases[i].status)
+	{
+	  if(strcmp(aliases[i].name, name)==0)
+	    aliases[i].status = 0;
+	}
+    }
+}
+
 static void Bg2Fg(int pnum)
 {
   //printf("%d\n", bgjobs[pnum].pid);
