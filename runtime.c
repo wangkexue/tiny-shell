@@ -150,11 +150,12 @@
 	  else
 	    RunCmdFork(cmd[0], TRUE);
 	}
-	  else{
-	    RunCmdPipe(cmd[0], cmd[1]);
-	    for(i = 0; i < n; i++)
-	      ReleaseCmdT(&cmd[i]);      
-	  }
+      else{
+	RunCmdPipe(cmd, n);
+	for(i = 0; i < n; i++)
+	  ReleaseCmdT(&cmd[i]); 
+	//	printf("cmd released\n");
+      }
     }
 
 	void RunCmdFork(commandT* cmd, bool fork)
@@ -180,39 +181,73 @@
 	  // exit(NULL);
 	}
 
-	void RunCmdPipe(commandT* cmd1, commandT* cmd2)
+	void RunCmdPipe(commandT** cmd, int n)
 	{
-	  int pid1, pid2, fd[2];
-	  if(pipe(fd) < 0)
-	    perror("pipe Error\n");
-	  if((pid1 = fork()) == 0)
+	  /*
+	  sigset_t sigset;
+	  sigemptyset(&sigset);
+	  sigaddset(&sigset, SIGCHLD);
+	  sigprocmask(SIG_BLOCK, &sigset, NULL);
+	  */
+
+	  int i;
+	  for(i=0;i<n;i++)
 	    {
-	      dup2(fd[1],1);
-	      close(fd[0]);
-	      RunExternalCmd(cmd1, TRUE);
+	      if(!ResolveExternalCmd(cmd[i]))
+		{
+		  printf("command not found");
+		  return;
+		}
 	    }
-	  else if(pid1<0)
-	    perror("cm1 fork error");
-	  else
+	  int fd[2];
+	  pid_t pid1, pid;
+	  if(pipe(fd) < 0)
+	    perror("pipe error");
+
+	  pid1 = fork();
+	  if(pid1 < 0)
 	    {
-	      if((pid2 = fork()) == 0)
+	      perror("pid1 fork error");
+	      exit(1);
+	    }
+	  else if(pid1 == 0)
+	    {   
+	      //close(fd[0]);
+	      //     printf("first child\n");
+	      dup2(fd[1],1);
+	      //RunExternalCmd(cmd1, TRUE);
+	      //ResolveExternalCmd(cmd[0]);
+	      execv(cmd[0]->name, cmd[0]->argv);
+	      exit(0);
+	      //close(fd[1]);
+ 	    }
+	  close(fd[1]);
+	  int j;
+	  for(j=1;j<n;j++)
+	    {
+	      pid = fork();
+	      if(pid == 0)
 		{
 		  dup2(fd[0], 0);
-		  close(fd[1]);
-		  RunCmdFork(cmd2, TRUE);
+		  if(j != n-1)
+		    {
+		      dup2(fd[1], 1);
+		      execv(cmd[j]->name, cmd[j]->argv);
+		      exit(0);
+		    }
+		  else
+		    execv(cmd[j]->name, cmd[j]->argv);
 		}
-	      else if(pid2 < 0)
-		perror("cmd2 fork error");
-	      else
-		{
-		  close(fd[0]);
-		  close(fd[1]);
-		  int status;
-		  waitpid(pid1, &status, 0);
-		  waitpid(pid2, &status, 0);
-		}
+	      close(fd[1]);	      
 	    }
+
+	  //waitpid(pid1, NULL, WNOHANG);
+	  //waitpid(pid2, NULL, WNOHANG);
+	  for(i=0; i<n; i++)
+	    wait(NULL);
 	}
+
+
 
 	void RunCmdRedirOut(commandT* cmd, char* file)
 	{
